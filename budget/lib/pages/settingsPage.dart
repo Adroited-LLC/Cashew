@@ -22,6 +22,7 @@ import 'package:budget/widgets/exportDB.dart';
 import 'package:budget/widgets/importCSV.dart';
 import 'package:budget/widgets/exportCSV.dart';
 import 'package:budget/pages/autoTransactionsPageEmail.dart';
+import 'package:budget/pages/simpleFinSyncPage.dart';
 import 'package:budget/pages/activityPage.dart';
 import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editBudgetPage.dart';
@@ -607,6 +608,14 @@ class SettingsPageContent extends StatelessWidget {
         ),
 
         SettingsHeader(title: "import-and-export".tr()),
+
+        SettingsContainerOpenPage(
+          openPage: const SimpleFinSyncPage(),
+          title: 'SimpleFIN Sync',
+          icon: appStateSettings["outlinedIcons"]
+              ? Icons.sync_outlined
+              : Icons.sync_rounded,
+        ),
 
         ExportCSV(),
 

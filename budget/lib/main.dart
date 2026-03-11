@@ -1,4 +1,5 @@
 import 'package:budget/functions.dart';
+import 'package:budget/simplefin/simplefin_service.dart';
 import 'package:budget/pages/accountsPage.dart';
 import 'package:budget/pages/autoTransactionsPageEmail.dart';
 import 'package:budget/struct/currencyFunctions.dart';
@@ -56,11 +57,15 @@ void main() async {
     await loadLanguageNamesJSON();
     await initializeSettings();
     tz.initializeTimeZones();
-    final String? locationName = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(locationName ?? "America/New_York"));
+    final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
     iconObjects.sort((a, b) => (a.mostLikelyCategoryName ?? a.icon)
         .compareTo((b.mostLikelyCategoryName ?? b.icon)));
     setHighRefreshRate();
+    // Trigger SimpleFIN sync on cold start (OnAppResume only catches background→foreground)
+    if (await SimplefinService.shouldAutoSync()) {
+      SimplefinService.sync().catchError((_) {});
+    }
     runApp(
       DevicePreview(
         enabled: enableDevicePreview,
@@ -150,6 +155,10 @@ class App extends StatelessWidget {
           updateGlobalAppLifecycleState: true,
           onAppResume: () async {
             await setHighRefreshRate();
+            // Trigger SimpleFIN background sync if overdue (silent, no UI)
+            if (await SimplefinService.shouldAutoSync()) {
+              SimplefinService.sync().catchError((_) {});
+            }
           },
           child: InitializeBiometrics(
             child: InitializeNotificationService(

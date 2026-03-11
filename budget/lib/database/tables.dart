@@ -125,6 +125,7 @@ enum MethodAdded {
   csv,
   preview,
   appLink,
+  simplefin, // index 5
 }
 
 enum SharedStatus { waiting, shared, error }
