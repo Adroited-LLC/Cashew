@@ -103,8 +103,9 @@ class SimplefinService {
 
       for (final txn in account.transactions) {
         try {
-          final amount = txn.amountDouble;
-          final isIncome = amount >= 0;
+          final rawAmount = txn.amountDouble;
+          final isIncome = rawAmount >= 0;
+          final amount = rawAmount; // Cashew stores negative amounts for expenses
 
           // Use 'sf-{id}' as transactionPk for natural deduplication.
           // createOrUpdateTransaction uses insertOrReplace, so re-syncing
@@ -130,6 +131,47 @@ class SimplefinService {
         } catch (e) {
           errors.add('txn ${txn.id}: $e');
         }
+      }
+
+      // Create/update an opening balance correction so the wallet balance
+      // matches SimpleFIN's reported balance, accounting for history
+      // outside our 45-day window.
+      try {
+        final reportedBalance = account.balanceDouble;
+        final allWalletTxns = await (database.select(database.transactions)
+              ..where((t) => t.walletFk.equals(walletPk!)))
+            .get();
+        final sfTxns = allWalletTxns.where((t) =>
+            t.methodAdded == MethodAdded.simplefin &&
+            t.transactionPk != 'sf-balance-${account.id}');
+        // Amounts are signed in Cashew (negative for expenses) — just sum directly
+        final importedSum = sfTxns.fold<double>(
+            0.0, (sum, t) => sum + t.amount);
+        final correction = reportedBalance - importedSum;
+
+        if (correction.abs() > 0.01) {
+          await database.createOrUpdateTransaction(
+            Transaction(
+              transactionPk: 'sf-balance-${account.id}',
+              name: 'Opening Balance',
+              amount: correction, // signed: negative = expense, positive = income
+              note: 'Auto-generated to match SimpleFIN reported balance',
+              categoryFk: defaultCategoryPk,
+              walletFk: walletPk!,
+              dateCreated: account.balanceDate != 0
+                  ? account.balanceDatetime
+                  : startDate,
+              dateTimeModified: DateTime.now(),
+              income: correction >= 0,
+              paid: true,
+              skipPaid: false,
+              methodAdded: MethodAdded.simplefin,
+            ),
+            updateSharedEntry: false,
+          );
+        }
+      } catch (e) {
+        errors.add('balance correction for ${account.name}: $e');
       }
     }
 

@@ -7,6 +7,7 @@ class SimplefinAccount {
   final String orgName;
   final String currency;
   final String balance;
+  final int balanceDate; // Unix timestamp (seconds)
   final List<SimplefinTransaction> transactions;
 
   SimplefinAccount({
@@ -15,8 +16,14 @@ class SimplefinAccount {
     required this.orgName,
     required this.currency,
     required this.balance,
+    required this.balanceDate,
     required this.transactions,
   });
+
+  double get balanceDouble => double.tryParse(balance) ?? 0.0;
+
+  DateTime get balanceDatetime =>
+      DateTime.fromMillisecondsSinceEpoch(balanceDate * 1000).toLocal();
 
   factory SimplefinAccount.fromJson(Map<String, dynamic> json) {
     return SimplefinAccount(
@@ -26,6 +33,7 @@ class SimplefinAccount {
           (json['org'] as Map<String, dynamic>?)?['name'] as String? ?? '',
       currency: json['currency'] as String? ?? 'USD',
       balance: json['balance'] as String? ?? '0',
+      balanceDate: json['balance-date'] as int? ?? 0,
       transactions: (json['transactions'] as List<dynamic>? ?? [])
           .map((t) =>
               SimplefinTransaction.fromJson(t as Map<String, dynamic>))
