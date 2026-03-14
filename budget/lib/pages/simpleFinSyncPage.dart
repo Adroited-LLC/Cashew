@@ -3,6 +3,8 @@ import 'package:drift/drift.dart' show Value;
 import 'package:budget/simplefin/simplefin_client.dart';
 import 'package:budget/simplefin/simplefin_service.dart';
 import 'package:budget/simplefin/simplefin_storage.dart';
+import 'package:budget/struct/claudeAIService.dart';
+import 'package:budget/struct/claudeAIStorage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
@@ -34,6 +36,13 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
   List<TransactionCategory> _categories = [];
   final _tokenController = TextEditingController();
 
+  // AI categorization state
+  String? _apiKey;
+  bool _showApiKey = false;
+  bool _isCategorizingAI = false;
+  String? _aiProgress;
+  final _apiKeyController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +52,7 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
   @override
   void dispose() {
     _tokenController.dispose();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
@@ -79,12 +89,16 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
       await SimplefinStorage.saveDefaultCategoryPk(uncategorizedPk);
     }
 
+    final apiKey = await ClaudeAIStorage.getApiKey();
+
     setState(() {
       _isConnected = accessUrl != null;
       _mappings = mappings;
       _lastSync = lastSync;
       _defaultCategoryPk = defaultCategory;
       _categories = categories.where((c) => c.mainCategoryPk == null).toList();
+      _apiKey = apiKey;
+      _apiKeyController.text = apiKey ?? '';
       _loading = false;
     });
 
@@ -204,6 +218,80 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
         ));
       }
     });
+  }
+
+  Future<void> _saveApiKey() async {
+    final key = _apiKeyController.text.trim();
+    if (key.isEmpty) {
+      await ClaudeAIStorage.clearApiKey();
+      setState(() => _apiKey = null);
+      openSnackbar(SnackbarMessage(
+        title: 'API key cleared',
+        icon: Icons.key_off_outlined,
+      ));
+    } else {
+      await ClaudeAIStorage.saveApiKey(key);
+      setState(() => _apiKey = key);
+      openSnackbar(SnackbarMessage(
+        title: 'API key saved',
+        icon: appStateSettings["outlinedIcons"]
+            ? Icons.check_circle_outlined
+            : Icons.check_circle_rounded,
+      ));
+    }
+  }
+
+  Future<void> _seedDefaultCategories() async {
+    await openLoadingPopupTryCatch(() async {
+      return await ClaudeAIService.seedDefaultCategories();
+    }, onSuccess: (count) async {
+      final refreshed = await database.getAllCategories();
+      setState(() => _categories =
+          refreshed.where((c) => c.mainCategoryPk == null).toList());
+      openSnackbar(SnackbarMessage(
+        title: count == 0
+            ? 'All default categories already exist'
+            : '$count categories added',
+        icon: appStateSettings["outlinedIcons"]
+            ? Icons.category_outlined
+            : Icons.category_rounded,
+      ));
+    });
+  }
+
+  Future<void> _autoCategorize() async {
+    setState(() {
+      _isCategorizingAI = true;
+      _aiProgress = 'Starting...';
+    });
+    try {
+      final count = await ClaudeAIService.categorizeUncategorizedTransactions(
+        onProgress: (done, total) {
+          if (mounted) {
+            setState(() => _aiProgress = '$done / $total categorized');
+          }
+        },
+      );
+      openSnackbar(SnackbarMessage(
+        title: count == 0
+            ? 'No uncategorized transactions found'
+            : '$count transactions categorized',
+        icon: Icons.auto_awesome_outlined,
+      ));
+    } catch (e) {
+      openSnackbar(SnackbarMessage(
+        title: 'Categorization failed',
+        description: e.toString(),
+        icon: appStateSettings["outlinedIcons"]
+            ? Icons.error_outlined
+            : Icons.error_rounded,
+      ));
+    } finally {
+      if (mounted) setState(() {
+        _isCategorizingAI = false;
+        _aiProgress = null;
+      });
+    }
   }
 
   void _setMapping(String simplefinAccountId, String? walletPk) {
@@ -336,6 +424,73 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
                   },
                 ),
               ),
+            const SizedBox(height: 8),
+
+            // ── AI Auto-Categorization ────────────────────────────────────────
+            SettingsHeader(title: 'AI Auto-Categorization'),
+            Padding(
+              padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
+              child: TextFont(
+                text:
+                    'Enter your Claude API key to automatically categorize imported transactions using AI. Your key is stored securely on-device.',
+                fontSize: 13,
+                maxLines: 5,
+                textColor: getColor(context, 'textLight'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _apiKeyController,
+                obscureText: !_showApiKey,
+                decoration: InputDecoration(
+                  labelText: 'Claude API Key',
+                  hintText: 'sk-ant-...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                        _showApiKey ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () =>
+                        setState(() => _showApiKey = !_showApiKey),
+                  ),
+                ),
+                style: const TextStyle(fontFamily: 'Inconsolata', fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
+              child: FilledButton.icon(
+                onPressed: _saveApiKey,
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Save API Key'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (_apiKey != null && _apiKey!.isNotEmpty) ...[
+              SettingsContainer(
+                title: 'Seed Default Categories',
+                description:
+                    'Add a standard set of spending categories to your account',
+                icon: appStateSettings["outlinedIcons"]
+                    ? Icons.category_outlined
+                    : Icons.category_rounded,
+                onTap: _seedDefaultCategories,
+              ),
+              SettingsContainer(
+                title: _isCategorizingAI
+                    ? (_aiProgress ?? 'Categorizing...')
+                    : 'Auto-categorize Uncategorized',
+                description: _isCategorizingAI
+                    ? null
+                    : 'Use Claude AI to categorize all uncategorized transactions',
+                icon: Icons.auto_awesome_outlined,
+                onTap: _isCategorizingAI ? null : _autoCategorize,
+              ),
+            ],
             const SizedBox(height: 8),
 
             // ── Account mapping ───────────────────────────────────────────────

@@ -1,6 +1,8 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/simplefin/simplefin_client.dart';
 import 'package:budget/simplefin/simplefin_storage.dart';
+import 'package:budget/struct/claudeAIService.dart';
+import 'package:budget/struct/claudeAIStorage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:drift/drift.dart' show Value;
 
@@ -195,6 +197,17 @@ class SimplefinService {
     }
 
     await SimplefinStorage.saveLastSyncTime(DateTime.now());
+
+    // Auto-categorize uncategorized transactions if Claude API key is set
+    final apiKey = await ClaudeAIStorage.getApiKey();
+    if (apiKey != null && apiKey.isNotEmpty) {
+      try {
+        await ClaudeAIService.categorizeUncategorizedTransactions();
+      } catch (_) {
+        // Categorization failure should not fail the sync
+      }
+    }
+
     return SimplefinSyncResult(
         imported: imported, skipped: skipped, errors: errors);
   }
