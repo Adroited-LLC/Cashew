@@ -14,6 +14,7 @@ import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/colors.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:budget/widgets/watchAllWallets.dart';
 import 'package:provider/provider.dart';
@@ -39,6 +40,7 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
   // AI categorization state
   String? _apiKey;
   bool _showApiKey = false;
+  bool _apiKeySaved = false;
   bool _isCategorizingAI = false;
   String? _aiProgress;
   final _apiKeyController = TextEditingController();
@@ -224,20 +226,16 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
     final key = _apiKeyController.text.trim();
     if (key.isEmpty) {
       await ClaudeAIStorage.clearApiKey();
-      setState(() => _apiKey = null);
-      openSnackbar(SnackbarMessage(
-        title: 'API key cleared',
-        icon: Icons.key_off_outlined,
-      ));
+      setState(() {
+        _apiKey = null;
+        _apiKeySaved = false;
+      });
     } else {
       await ClaudeAIStorage.saveApiKey(key);
-      setState(() => _apiKey = key);
-      openSnackbar(SnackbarMessage(
-        title: 'API key saved',
-        icon: appStateSettings["outlinedIcons"]
-            ? Icons.check_circle_outlined
-            : Icons.check_circle_rounded,
-      ));
+      setState(() {
+        _apiKey = key;
+        _apiKeySaved = true;
+      });
     }
   }
 
@@ -426,72 +424,78 @@ class _SimpleFinSyncPageState extends State<SimpleFinSyncPage> {
               ),
             const SizedBox(height: 8),
 
-            // ── AI Auto-Categorization ────────────────────────────────────────
-            SettingsHeader(title: 'AI Auto-Categorization'),
-            Padding(
-              padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
-              child: TextFont(
-                text:
-                    'Enter your Claude API key to automatically categorize imported transactions using AI. Your key is stored securely on-device.',
-                fontSize: 13,
-                maxLines: 5,
-                textColor: getColor(context, 'textLight'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
-              child: TextField(
-                controller: _apiKeyController,
-                obscureText: !_showApiKey,
-                decoration: InputDecoration(
-                  labelText: 'Claude API Key',
-                  hintText: 'sk-ant-...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                        _showApiKey ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () =>
-                        setState(() => _showApiKey = !_showApiKey),
-                  ),
+            // ── AI Auto-Categorization (mobile/desktop only) ──────────────────
+            if (!kIsWeb) ...[
+              SettingsHeader(title: 'AI Auto-Categorization'),
+              Padding(
+                padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
+                child: TextFont(
+                  text:
+                      'Enter your Claude API key to automatically categorize imported transactions using AI. Your key is stored securely on-device.',
+                  fontSize: 13,
+                  maxLines: 5,
+                  textColor: getColor(context, 'textLight'),
                 ),
-                style: const TextStyle(fontFamily: 'Inconsolata', fontSize: 13),
               ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
-              child: FilledButton.icon(
-                onPressed: _saveApiKey,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Save API Key'),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _apiKeyController,
+                  obscureText: !_showApiKey,
+                  decoration: InputDecoration(
+                    labelText: 'Claude API Key',
+                    hintText: 'sk-ant-...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(_showApiKey
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () =>
+                          setState(() => _showApiKey = !_showApiKey),
+                    ),
+                  ),
+                  style:
+                      const TextStyle(fontFamily: 'Inconsolata', fontSize: 13),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            if (_apiKey != null && _apiKey!.isNotEmpty) ...[
-              SettingsContainer(
-                title: 'Seed Default Categories',
-                description:
-                    'Add a standard set of spending categories to your account',
-                icon: appStateSettings["outlinedIcons"]
-                    ? Icons.category_outlined
-                    : Icons.category_rounded,
-                onTap: _seedDefaultCategories,
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
+                child: FilledButton.icon(
+                  onPressed: _saveApiKey,
+                  icon: Icon(_apiKeySaved
+                      ? Icons.check_circle_outline
+                      : Icons.save_outlined),
+                  label: Text(_apiKeySaved ? 'API Key Saved' : 'Save API Key'),
+                ),
               ),
-              SettingsContainer(
-                title: _isCategorizingAI
-                    ? (_aiProgress ?? 'Categorizing...')
-                    : 'Auto-categorize Uncategorized',
-                description: _isCategorizingAI
-                    ? null
-                    : 'Use Claude AI to categorize all uncategorized transactions',
-                icon: Icons.auto_awesome_outlined,
-                onTap: _isCategorizingAI ? null : _autoCategorize,
-              ),
+              const SizedBox(height: 8),
+              if (_apiKey != null && _apiKey!.isNotEmpty) ...[
+                SettingsContainer(
+                  title: 'Seed Default Categories',
+                  description:
+                      'Add a standard set of spending categories to your account',
+                  icon: appStateSettings["outlinedIcons"]
+                      ? Icons.category_outlined
+                      : Icons.category_rounded,
+                  onTap: _seedDefaultCategories,
+                ),
+                SettingsContainer(
+                  title: _isCategorizingAI
+                      ? (_aiProgress ?? 'Categorizing...')
+                      : 'Auto-categorize Uncategorized',
+                  description: _isCategorizingAI
+                      ? null
+                      : 'Use Claude AI to categorize all uncategorized transactions',
+                  icon: Icons.auto_awesome_outlined,
+                  onTap: _isCategorizingAI ? null : _autoCategorize,
+                ),
+              ],
+              const SizedBox(height: 8),
             ],
-            const SizedBox(height: 8),
 
             // ── Account mapping ───────────────────────────────────────────────
             SettingsHeader(title: 'Account Mapping'),
