@@ -9,11 +9,16 @@ import 'package:budget/struct/upcomingTransactionsFunctions.dart';
 import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/notificationsSettings.dart';
 import 'package:budget/widgets/openPopup.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 Future<String?> initializeNotifications() async {
+  // Skip notifications on Linux/Windows desktop — flutter_local_notifications
+  // can hang on Linux/KDE Wayland, and Firebase auth is unavailable on both.
+  if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) return null;
+
   // Since iOS cannot send scheduled notifications when the app is open
   // There is no need to listen to incoming notification payloads
   if (getPlatform(ignoreEmulation: true) != PlatformOS.isIOS) {

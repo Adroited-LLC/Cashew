@@ -46,6 +46,8 @@ class ClaudeAIService {
   ];
 
   static const Set<String> _incomeCategories = {'Income', 'Paycheck'};
+  // Note: Credit Card Payment is intentionally NOT in _incomeCategories —
+  // paying a credit card bill is outgoing money from your bank account.
 
   /// Seed the default category list into the database, skipping any that
   /// already exist (matched by name, case-insensitive).
